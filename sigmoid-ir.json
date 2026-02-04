@@ -1,25 +1,15 @@
 {
-    "resourceSpecId": "",
+    "resourceSpecId": "44444444-4444-4444-8444-444444444444",
     "stableId": "ecs",
     "displayName": "ECS",
     "resourceType": "compute.ecs",
     "vpcDependency": "optional",
     "status": "draft",
-    "inputs": {
-        "cluster_name": "sigmoid-ecs-cluster",
-        "capacity_providers": ["FARGATE"],
-        "default_capacity_provider_strategy": [
-            {
-                "capacity_provider": "FARGATE",
-                "weight": 1,
-                "base": 0
-            }
-        ]
-    },
     "position": { "x": 0, "y": 0 },
     "terraform": {
         "module": {
-            "source": "../../terraform-modules/terraform-aws-ecs"
+            "source": "github.com/sigmoid-hq/terraform-aws-ecs",
+            "ref": "main"
         }
     }
 }
