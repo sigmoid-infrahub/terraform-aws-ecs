@@ -12,5 +12,11 @@
             "source": "github.com/sigmoid-hq/terraform-aws-ecs",
             "ref": "main"
         }
+    },
+    "easy": {
+        "hidden": true,
+        "alias": "Server",
+        "group": "compute-server",
+        "priority": 20
     }
 }
