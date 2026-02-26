@@ -1,7 +1,7 @@
 {
     "resourceSpecId": "44444444-4444-4444-8444-444444444444",
     "stableId": "ecs",
-    "displayName": "ECS",
+    "displayName": "ECS Cluster",
     "category": "container",
     "resourceType": "compute.ecs",
     "vpcDependency": "optional",
