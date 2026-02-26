@@ -1,3 +1,97 @@
+resource "aws_iam_role" "task_execution" {
+  count = var.create_task_execution_role ? 1 : 0
+
+  name = "${var.cluster_name}-task-execution-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "sts:AssumeRole"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = local.resolved_tags
+}
+
+resource "aws_iam_role_policy_attachment" "task_execution" {
+  count = var.create_task_execution_role ? 1 : 0
+
+  role       = aws_iam_role.task_execution[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_role" "task" {
+  count = var.create_task_role ? 1 : 0
+
+  name = "${var.cluster_name}-task-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "sts:AssumeRole"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = local.resolved_tags
+}
+
+resource "aws_iam_role_policy_attachment" "task_managed" {
+  for_each = var.create_task_role ? toset(var.task_role_policy_arns) : toset([])
+
+  role       = aws_iam_role.task[0].name
+  policy_arn = each.value
+}
+
+resource "aws_iam_role_policy" "task_inline" {
+  for_each = var.create_task_role ? { for policy in var.task_role_inline_policies : policy.name => policy } : {}
+
+  role   = aws_iam_role.task[0].name
+  name   = each.value.name
+  policy = each.value.policy
+}
+
+resource "aws_security_group" "this" {
+  count = var.create_security_group ? 1 : 0
+
+  name        = "${var.cluster_name}-ecs-service-sg"
+  description = "Security group for ECS services"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port   = var.service_port
+    to_port     = var.service_port
+    protocol    = "tcp"
+    cidr_blocks = var.security_group_ingress_cidr_blocks
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = local.resolved_tags
+}
+
+resource "aws_cloudwatch_log_group" "this" {
+  count = var.create_log_group ? 1 : 0
+
+  name              = "/ecs/${var.cluster_name}"
+  retention_in_days = var.log_group_retention_in_days
+  tags              = local.resolved_tags
+}
+
 resource "aws_ecs_cluster" "this" {
   name = var.cluster_name
 
@@ -6,29 +100,27 @@ resource "aws_ecs_cluster" "this" {
     value = var.container_insights
   }
 
-  dynamic "execute_command_configuration" {
-    for_each = var.execute_command_configuration == null ? [] : [var.execute_command_configuration]
+  dynamic "configuration" {
+    for_each = var.execute_command_configuration == null ? [] : [1]
     content {
-      kms_key_id = lookup(execute_command_configuration.value, "kms_key_id", null)
-      logging    = lookup(execute_command_configuration.value, "logging", null)
-
-      dynamic "log_configuration" {
-        for_each = lookup(execute_command_configuration.value, "log_configuration", null) == null ? [] : [execute_command_configuration.value.log_configuration]
+      dynamic "execute_command_configuration" {
+        for_each = var.execute_command_configuration == null ? [] : [var.execute_command_configuration]
         content {
-          cloud_watch_log_group_name     = lookup(log_configuration.value, "cloud_watch_log_group_name", null)
-          cloud_watch_encryption_enabled = lookup(log_configuration.value, "cloud_watch_encryption_enabled", null)
-          s3_bucket_name                 = lookup(log_configuration.value, "s3_bucket_name", null)
-          s3_bucket_encryption_enabled   = lookup(log_configuration.value, "s3_bucket_encryption_enabled", null)
-          s3_key_prefix                  = lookup(log_configuration.value, "s3_key_prefix", null)
+          kms_key_id = lookup(execute_command_configuration.value, "kms_key_id", null)
+          logging    = lookup(execute_command_configuration.value, "logging", null)
+
+          dynamic "log_configuration" {
+            for_each = lookup(execute_command_configuration.value, "log_configuration", null) == null ? [] : [execute_command_configuration.value.log_configuration]
+            content {
+              cloud_watch_log_group_name     = lookup(log_configuration.value, "cloud_watch_log_group_name", null)
+              cloud_watch_encryption_enabled = lookup(log_configuration.value, "cloud_watch_encryption_enabled", null)
+              s3_bucket_name                 = lookup(log_configuration.value, "s3_bucket_name", null)
+              s3_bucket_encryption_enabled   = lookup(log_configuration.value, "s3_bucket_encryption_enabled", null)
+              s3_key_prefix                  = lookup(log_configuration.value, "s3_key_prefix", null)
+            }
+          }
         }
       }
-    }
-  }
-
-  dynamic "service_connect_defaults" {
-    for_each = var.service_connect_defaults == null ? [] : [var.service_connect_defaults]
-    content {
-      namespace = lookup(service_connect_defaults.value, "namespace", null)
     }
   }
 
@@ -60,20 +152,14 @@ resource "aws_ecs_task_definition" "this" {
   memory                   = lookup(each.value, "memory", null)
   network_mode             = lookup(each.value, "network_mode", null)
   requires_compatibilities = lookup(each.value, "requires_compatibilities", null)
-  execution_role_arn       = lookup(each.value, "execution_role_arn", null)
-  task_role_arn            = lookup(each.value, "task_role_arn", null)
+  execution_role_arn       = lookup(each.value, "execution_role_arn", local.task_execution_role_arn)
+  task_role_arn            = lookup(each.value, "task_role_arn", local.task_role_arn)
 
   dynamic "volume" {
     for_each = lookup(each.value, "volumes", [])
     content {
-      name = volume.value.name
-
-      dynamic "host_path" {
-        for_each = lookup(volume.value, "host", null) == null ? [] : [volume.value.host]
-        content {
-          path = lookup(host_path.value, "sourcePath", null)
-        }
-      }
+      name      = volume.value.name
+      host_path = lookup(lookup(volume.value, "host", {}), "sourcePath", null)
     }
   }
 
@@ -105,7 +191,7 @@ resource "aws_ecs_service" "this" {
     for_each = length(var.subnets) == 0 ? [] : [1]
     content {
       subnets          = var.subnets
-      security_groups  = var.security_groups
+      security_groups  = local.security_group_ids
       assign_public_ip = var.assign_public_ip
     }
   }
