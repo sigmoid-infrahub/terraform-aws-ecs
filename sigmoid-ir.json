@@ -1,0 +1,22 @@
+{
+    "resourceSpecId": "44444444-4444-4444-8444-444444444444",
+    "stableId": "ecs",
+    "displayName": "ECS Cluster",
+    "category": "container",
+    "resourceType": "compute.ecs",
+    "vpcDependency": "optional",
+    "status": "draft",
+    "position": { "x": 0, "y": 0 },
+    "terraform": {
+        "module": {
+            "source": "github.com/sigmoid-hq/terraform-aws-ecs",
+            "ref": "main"
+        }
+    },
+    "easy": {
+        "hidden": false,
+        "alias": "Container",
+        "group": "compute-container",
+        "priority": 20
+    }
+}
