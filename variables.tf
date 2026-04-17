@@ -143,3 +143,25 @@ variable "tags" {
   description = "Tags to apply"
   default     = {}
 }
+
+# ====================================
+# Sigmoid Tags Configuration
+# ====================================
+
+variable "sigmoid_environment" {
+  description = "Sigmoid environment identifier for cost allocation"
+  type        = string
+  default     = ""
+}
+
+variable "sigmoid_project" {
+  description = "Sigmoid project identifier for cost allocation"
+  type        = string
+  default     = ""
+}
+
+variable "sigmoid_team" {
+  description = "Sigmoid team identifier for cost allocation"
+  type        = string
+  default     = ""
+}
