@@ -89,6 +89,7 @@ resource "aws_cloudwatch_log_group" "this" {
 
   name              = "/ecs/${var.cluster_name}"
   retention_in_days = var.log_group_retention_in_days
+  kms_key_id        = var.log_group_kms_key_id != "" ? var.log_group_kms_key_id : null
   tags              = local.resolved_tags
 }
 
@@ -97,17 +98,17 @@ resource "aws_ecs_cluster" "this" {
 
   setting {
     name  = "containerInsights"
-    value = var.container_insights
+    value = local.container_insights_value
   }
 
   dynamic "configuration" {
-    for_each = var.execute_command_configuration == null ? [] : [1]
+    for_each = local.execute_command_configuration_enabled ? [1] : []
     content {
       dynamic "execute_command_configuration" {
-        for_each = var.execute_command_configuration == null ? [] : [var.execute_command_configuration]
+        for_each = [local.execute_command_configuration]
         content {
           kms_key_id = lookup(execute_command_configuration.value, "kms_key_id", null)
-          logging    = lookup(execute_command_configuration.value, "logging", null)
+          logging    = lookup(execute_command_configuration.value, "logging", var.execute_command_logging)
 
           dynamic "log_configuration" {
             for_each = lookup(execute_command_configuration.value, "log_configuration", null) == null ? [] : [execute_command_configuration.value.log_configuration]
@@ -163,6 +164,13 @@ resource "aws_ecs_task_definition" "this" {
     }
   }
 
+  dynamic "ephemeral_storage" {
+    for_each = var.ephemeral_storage_size_in_gib > 20 ? [var.ephemeral_storage_size_in_gib] : []
+    content {
+      size_in_gib = ephemeral_storage.value
+    }
+  }
+
   tags = local.resolved_tags
 }
 
@@ -197,6 +205,10 @@ resource "aws_ecs_service" "this" {
   }
 
   tags = local.resolved_tags
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 resource "aws_appautoscaling_target" "this" {

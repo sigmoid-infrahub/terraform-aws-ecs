@@ -17,8 +17,13 @@ variable "default_capacity_provider_strategy" {
 
 variable "container_insights" {
   type        = string
-  description = "Container insights setting"
+  description = "Container insights setting. Valid values: enabled, disabled, enhanced"
   default     = "enabled"
+
+  validation {
+    condition     = contains(["enabled", "disabled", "enhanced"], var.container_insights)
+    error_message = "container_insights must be one of: enabled, disabled, enhanced"
+  }
 }
 
 variable "services" {
@@ -91,6 +96,35 @@ variable "log_group_retention_in_days" {
   type        = number
   description = "Retention in days for created CloudWatch log group"
   default     = 30
+}
+
+variable "log_group_kms_key_id" {
+  type        = string
+  description = "KMS key ID for encrypting ECS task logs. When empty, CloudWatch Logs default encryption is used"
+  default     = ""
+}
+
+variable "execute_command_logging" {
+  type        = string
+  description = "Execute command logging mode. Valid values: NONE, OVERRIDE, DEFAULT"
+  default     = "OVERRIDE"
+
+  validation {
+    condition     = contains(["NONE", "OVERRIDE", "DEFAULT"], var.execute_command_logging)
+    error_message = "execute_command_logging must be one of: NONE, OVERRIDE, DEFAULT"
+  }
+}
+
+variable "execute_command_kms_key_id" {
+  type        = string
+  description = "KMS key ID for execute-command sessions. When empty, no session KMS key is configured"
+  default     = ""
+}
+
+variable "ephemeral_storage_size_in_gib" {
+  type        = number
+  description = "Ephemeral storage size in GiB for task definitions. 0 means not set; applied only when greater than 20"
+  default     = 0
 }
 
 variable "task_role_policy_arns" {
