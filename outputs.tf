@@ -15,7 +15,7 @@ output "cluster_name" {
 
 output "service_arns" {
   description = "List of ECS service ARNs"
-  value       = [for service in aws_ecs_service.this : service.arn]
+  value       = [for service in aws_ecs_service.this : service.id]
 }
 
 output "task_definition_arns" {
@@ -34,7 +34,7 @@ output "module" {
     cluster_id                = aws_ecs_cluster.this.id
     cluster_arn               = aws_ecs_cluster.this.arn
     cluster_name              = aws_ecs_cluster.this.name
-    service_arns              = [for service in aws_ecs_service.this : service.arn]
+    service_arns              = [for service in aws_ecs_service.this : service.id]
     task_definition_arns      = [for task_definition in aws_ecs_task_definition.this : task_definition.arn]
     task_execution_role_arn   = local.task_execution_role_arn
     task_role_arn             = local.task_role_arn
