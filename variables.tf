@@ -15,6 +15,53 @@ variable "default_capacity_provider_strategy" {
   default     = null
 }
 
+variable "launch_type" {
+  type        = string
+  description = "Compute launch type for ECS services. Valid values: FARGATE, EC2"
+  default     = "FARGATE"
+
+  validation {
+    condition     = contains(["FARGATE", "EC2"], var.launch_type)
+    error_message = "launch_type must be one of: FARGATE, EC2"
+  }
+}
+
+variable "instance_type" {
+  type        = string
+  description = "EC2 instance type for the container instances backing the EC2 launch type"
+  default     = "t3.medium"
+}
+
+variable "asg_min_size" {
+  type        = number
+  description = "Minimum size of the EC2 container instance Auto Scaling group"
+  default     = 1
+}
+
+variable "asg_max_size" {
+  type        = number
+  description = "Maximum size of the EC2 container instance Auto Scaling group"
+  default     = 3
+}
+
+variable "asg_desired_capacity" {
+  type        = number
+  description = "Desired capacity of the EC2 container instance Auto Scaling group"
+  default     = 1
+}
+
+variable "key_name" {
+  type        = string
+  description = "EC2 key pair name for the container instances. When null, no key pair is attached"
+  default     = null
+}
+
+variable "ecs_ami_ssm_parameter" {
+  type        = string
+  description = "SSM parameter path resolving the ECS-optimized AMI ID for EC2 launch type"
+  default     = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
+}
+
 variable "container_insights" {
   type        = string
   description = "Container insights setting. Valid values: enabled, disabled, enhanced"

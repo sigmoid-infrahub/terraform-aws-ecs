@@ -128,11 +128,127 @@ resource "aws_ecs_cluster" "this" {
   tags = local.resolved_tags
 }
 
+data "aws_ssm_parameter" "ecs_ami" {
+  count = local.is_ec2_launch_type ? 1 : 0
+
+  name = var.ecs_ami_ssm_parameter
+}
+
+resource "aws_iam_role" "ec2_instance" {
+  count = local.is_ec2_launch_type ? 1 : 0
+
+  name_prefix = "${var.cluster_name}-ecs-ec2-"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "sts:AssumeRole"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = local.resolved_tags
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_instance" {
+  count = local.is_ec2_launch_type ? 1 : 0
+
+  role       = aws_iam_role.ec2_instance[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+}
+
+resource "aws_iam_instance_profile" "ec2_instance" {
+  count = local.is_ec2_launch_type ? 1 : 0
+
+  name_prefix = "${var.cluster_name}-ecs-ec2-"
+  role        = aws_iam_role.ec2_instance[0].name
+
+  tags = local.resolved_tags
+}
+
+resource "aws_launch_template" "ec2" {
+  count = local.is_ec2_launch_type ? 1 : 0
+
+  name_prefix   = "${var.cluster_name}-ecs-ec2-"
+  image_id      = data.aws_ssm_parameter.ecs_ami[0].value
+  instance_type = var.instance_type
+  key_name      = var.key_name
+
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.ec2_instance[0].arn
+  }
+
+  vpc_security_group_ids = local.security_group_ids
+
+  user_data = base64encode(<<-EOT
+    #!/bin/bash
+    echo "ECS_CLUSTER=${var.cluster_name}" >> /etc/ecs/ecs.config
+  EOT
+  )
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = local.resolved_tags
+  }
+
+  tags = local.resolved_tags
+}
+
+resource "aws_autoscaling_group" "ec2" {
+  count = local.is_ec2_launch_type ? 1 : 0
+
+  name_prefix         = "${var.cluster_name}-ecs-ec2-"
+  min_size            = var.asg_min_size
+  max_size            = var.asg_max_size
+  desired_capacity    = var.asg_desired_capacity
+  vpc_zone_identifier = var.subnets
+
+  launch_template {
+    id      = aws_launch_template.ec2[0].id
+    version = "$Latest"
+  }
+
+  tag {
+    key                 = "AmazonECSManaged"
+    value               = ""
+    propagate_at_launch = true
+  }
+
+  dynamic "tag" {
+    for_each = local.resolved_tags
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
+  }
+}
+
+resource "aws_ecs_capacity_provider" "ec2" {
+  count = local.is_ec2_launch_type ? 1 : 0
+
+  name = "${var.cluster_name}-ec2"
+
+  auto_scaling_group_provider {
+    auto_scaling_group_arn = aws_autoscaling_group.ec2[0].arn
+
+    managed_scaling {
+      status = "ENABLED"
+    }
+  }
+
+  tags = local.resolved_tags
+}
+
 resource "aws_ecs_cluster_capacity_providers" "this" {
-  count = length(var.capacity_providers) > 0 || var.default_capacity_provider_strategy != null ? 1 : 0
+  count = local.is_ec2_launch_type || length(var.capacity_providers) > 0 || var.default_capacity_provider_strategy != null ? 1 : 0
 
   cluster_name       = aws_ecs_cluster.this.name
-  capacity_providers = var.capacity_providers
+  capacity_providers = local.capacity_providers
 
   dynamic "default_capacity_provider_strategy" {
     for_each = var.default_capacity_provider_strategy == null ? [] : var.default_capacity_provider_strategy
@@ -195,12 +311,20 @@ resource "aws_ecs_service" "this" {
     }
   }
 
+  dynamic "capacity_provider_strategy" {
+    for_each = local.is_ec2_launch_type ? [1] : []
+    content {
+      capacity_provider = aws_ecs_capacity_provider.ec2[0].name
+      weight            = 1
+    }
+  }
+
   dynamic "network_configuration" {
     for_each = length(var.subnets) == 0 ? [] : [1]
     content {
       subnets          = var.subnets
       security_groups  = local.security_group_ids
-      assign_public_ip = var.assign_public_ip
+      assign_public_ip = local.is_ec2_launch_type ? null : var.assign_public_ip
     }
   }
 
